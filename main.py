@@ -929,7 +929,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    if state == "awaiting_city":
+        if state == "awaiting_city":
         city_input = text.strip()
         matched = next((c for c in ALGERIAN_CITIES if c.lower() == city_input.lower()), None)
         if not matched:
@@ -940,7 +940,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             result = await fetch_prayer_times(matched)
             await update.message.reply_text(result, parse_mode=ParseMode.MARKDOWN, reply_markup=get_main_keyboard(u.id))
         else:
-            await update.message.reply_text("⚠️ ل اسماً صحيحاً من القائمة.", reply_markup=get_main_keyboard(u.id))
+            await update.message.reply_text(
+                "⚠️ المدينة غير موجودة. أرسل اسماً صحيحاً من القائمة.",
+                reply_markup=get_main_keyboard(u.id)
+            )
         return
 
     # ── Main menu routing ──────────────────────────────────────────
@@ -1923,4 +1926,4 @@ def main():
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
-    main()المدينة غير موجودة. أرس
+    main()
