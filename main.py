@@ -810,7 +810,8 @@ async def handle_message(update:Update,context:ContextTypes.DEFAULT_TYPE):
         return
 
     if state=="await_broadcast":
-        sent=0        for xid in get_all_users():
+        sent=0
+        for xid in get_all_users():
             try: await context.bot.send_message(xid,text); sent+=1
             except: pass
         context.user_data.clear()
