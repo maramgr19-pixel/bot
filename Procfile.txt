@@ -1,0 +1,1 @@
+worker: python Muslimah_bot.py
