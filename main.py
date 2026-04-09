@@ -8,7 +8,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Cal
 logging.basicConfig(format="%(asctime)s | %(levelname)s | %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-TOKEN = os.environ.get("BOT_TOKEN")
+TOKEN       = os.environ.get("BOT_TOKEN")
 DB_PATH     = "muslim_bot.db"
 QURAN_API   = "https://api.alquran.cloud/v1"
 ALADHAN_API = "https://api.aladhan.com/v1"
@@ -593,7 +593,7 @@ def get_main_keyboard(uid=None):
         ["📖 القرآن الكريم",     "🌿 الورد اليومي"],
         ["📿 التسبيح",           "🌅 أذكار الصباح"],
         ["🌆 أذكار المساء",      "🌙 أذكار النوم"],
-        ["🕌 أذكار الصلاة",     "✨ أذكار اليقظة"],
+        ["🕌 أذكار الصلاة",     "✨ أذكار الاستيقاظ"],   # ← تم التغيير هنا
         ["💧 أذكار الوضوء",     "🌺 أدعية خاصة"],
         ["🌸 أحكام المرأة",      "⭐ سنن يوم الجمعة"],
         ["🕐 أوقات الصلاة",     "📅 التاريخ اليوم"],
@@ -649,6 +649,43 @@ def build_surah_keyboard(page, riwaya):
     if end < 114: nav.append(InlineKeyboardButton("▶️ التالي", callback_data=f"sp_{page+1}_{riwaya}"))
     if nav: rows.append(nav)
     rows.append([back_btn("quran_back")])
+    return InlineKeyboardMarkup(rows)
+
+# ── لوحة اختيار الآية بعد اختيار السورة ──────────────────────────
+def build_surah_options_keyboard(surah, riwaya):
+    """تظهر بعد اختيار السورة: من البداية، من حيث توقفت، اختر آية"""
+    last = get_surah_progress_global(surah, riwaya)  # placeholder — يُستدعى مع uid
+    return surah, riwaya
+
+def build_surah_start_keyboard(uid, surah, riwaya):
+    total = SURAH_AYAH_COUNT.get(surah, 1)
+    last  = get_surah_progress(uid, surah, riwaya)
+    rows  = []
+    rows.append([InlineKeyboardButton("▶️ من البداية", callback_data=f"read_{surah}_1_{riwaya}")])
+    if last > 0:
+        rows.append([InlineKeyboardButton(f"⏩ من حيث توقفت (آية {last})", callback_data=f"read_{surah}_{last}_{riwaya}")])
+    rows.append([InlineKeyboardButton("🔢 اختر آية معينة", callback_data=f"choose_ayah_{surah}_{riwaya}")])
+    rows.append([back_btn(f"sp_0_{riwaya}")])
+    return InlineKeyboardMarkup(rows)
+
+def build_ayah_choice_keyboard(surah, riwaya, page=0):
+    """لوحة اختيار الآية برقمها"""
+    total = SURAH_AYAH_COUNT.get(surah, 1)
+    per   = 20
+    start = page * per + 1
+    end   = min(start + per - 1, total)
+    rows  = []
+    ayahs = list(range(start, end + 1))
+    for i in range(0, len(ayahs), 5):
+        row = [InlineKeyboardButton(str(a), callback_data=f"read_{surah}_{a}_{riwaya}") for a in ayahs[i:i+5]]
+        rows.append(row)
+    nav = []
+    if page > 0:
+        nav.append(InlineKeyboardButton("◀️ السابق", callback_data=f"ayah_page_{surah}_{riwaya}_{page-1}"))
+    if end < total:
+        nav.append(InlineKeyboardButton("▶️ التالي", callback_data=f"ayah_page_{surah}_{riwaya}_{page+1}"))
+    if nav: rows.append(nav)
+    rows.append([back_btn(f"ss_{surah}_{riwaya}")])
     return InlineKeyboardMarkup(rows)
 
 def build_city_keyboard():
@@ -746,7 +783,7 @@ ADHKAR_MAP = {
     "morning":  ("🌅 أذكار الصباح",   MORNING_ADHKAR),
     "evening":  ("🌆 أذكار المساء",    EVENING_ADHKAR),
     "sleep":    ("🌙 أذكار النوم",     SLEEP_ADHKAR),
-    "wakeup":   ("✨ أذكار اليقظة",    WAKEUP_ADHKAR),
+    "wakeup":   ("📿 أذكار الاستيقاظ", WAKEUP_ADHKAR),   # ← تم التغيير هنا
     "wudu":     ("💧 أذكار الوضوء",    WUDU_ADHKAR),
 }
 
@@ -760,44 +797,44 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     upsert_user(uid, user.username, user.first_name, user.last_name)
     log_activity(uid, "start")
     text = (
-        "🕌 *بسم الله الرحمن الرحيم*\n\n"
-        "السلام عليكم ورحمة الله وبركاته 🌙\n\n"
-        "أهلاً بك في *بوت المسلم* 📿\n"
-        "رفيقك اليومي للذكر والعبادة والقرآن الكريم\n\n"
-        "✨ اختر ما يناسبك من القائمة أدناه:"
+                "🕌 *بسم الله الرحمن الرحيم*\n\n"
+        "السلام عليكم ورحمة الله وبركاته 🌿\n\n"
+        "أهلاً بك في *بوت المسلم* 📖\n\n"
+        "يمكنك من خلال هذا البوت:\n"
+        "• قراءة القرآن الكريم (حفص وورش)\n"
+        "• متابعة وردك اليومي\n"
+        "• أذكار الصباح والمساء والنوم والاستيقاظ\n"
+        "• التسبيح والأدعية\n"
+        "• أوقات الصلاة لمدن الجزائر\n"
+        "• وأكثر...\n\n"
+        "اختر من القائمة أدناه 👇"
     )
-    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN,
-                                    reply_markup=get_main_keyboard(uid))
+    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=get_main_keyboard(uid))
 
 @banned_check
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
+    uid  = update.effective_user.id
     text = (
-        "ℹ️ *المساعدة — بوت المسلم*\n\n"
-        "📖 *القرآن الكريم* — تصفح وقراءة السور بروايتَي حفص وورش\n"
-        "🌿 *الورد اليومي* — تتبع ورد القرآن يومياً\n"
-        "📿 *التسبيح* — عداد التسبيح مع حفظ التقدم\n"
-        "🌅 *أذكار الصباح والمساء* — أذكار مسنونة مع المصدر\n"
-        "🕌 *أذكار الصلاة* — أذكار جميع أركان الصلاة\n"
-        "🌙 *أذكار النوم واليقظة* — أذكار ما قبل وبعد النوم\n"
-        "💧 *أذكار الوضوء* — أذكار الطهارة\n"
-        "🌺 *أدعية خاصة* — أدعية لمختلف الأحوال\n"
-        "🌸 *أحكام المرأة* — أدعية وأذكار خاصة\n"
-        "⭐ *سنن يوم الجمعة* — سنن وسور مباركة\n"
-        "🕐 *أوقات الصلاة* — مواقيت صلاة المدن الجزائرية\n"
-        "📅 *التاريخ اليوم* — التاريخ الهجري والميلادي\n"
-        "📚 *حديث اليوم* — حديث نبوي يومي\n"
-        "🤲 *دعاء اليوم* — دعاء مأثور يومي\n"
-        "🎓 *الدورات المجانية* — روابط تعليمية إسلامية\n"
-        "📊 *إحصائياتي* — تتبع نشاطك\n"
+        "ℹ️ *المساعدة*\n\n"
+        "📖 *القرآن الكريم* — اقرأ بروايتي حفص وورش مع حفظ تقدمك\n"
+        "🌿 *الورد اليومي* — ورد قرآني يومي متواصل\n"
+        "📿 *التسبيح* — عداد التسبيح مع حفظ الإحصائيات\n"
+        "🌅 *أذكار الصباح والمساء* — بالمأثورات الصحيحة\n"
+        "🌙 *أذكار النوم والاستيقاظ* — سنة النبي ﷺ\n"
+        "🕌 *أذكار الصلاة* — من الأذان حتى ما بعد الصلاة\n"
+        "💧 *أذكار الوضوء* — أذكار البدء والانتهاء\n"
+        "🤲 *أدعية خاصة* — للهم والكرب والشفاء والرزق\n"
+        "🌸 *أحكام المرأة* — أدعية مخصصة\n"
+        "⭐ *سنن الجمعة* — سور وسنن يوم الجمعة\n"
+        "🕐 *أوقات الصلاة* — لجميع مدن الجزائر\n"
+        "📅 *التاريخ* — هجري وميلادي\n"
         "💬 *استفسار* — تواصل مع الإدارة\n\n"
-        "_جزاك الله خيراً على استخدامك البوت_ 🌟"
+        "بارك الله فيك 🌿"
     )
-    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN,
-                                    reply_markup=get_main_keyboard(uid))
+    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=get_main_keyboard(uid))
 
 # ══════════════════════════════════════════════════════════════════
-# Handlers — Messages
+# Handler — Messages
 # ══════════════════════════════════════════════════════════════════
 @banned_check
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -806,7 +843,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     upsert_user(uid, user.username, user.first_name, user.last_name)
     txt  = update.message.text.strip()
 
-    # حالة الانتظار (awaiting_*)
+    # ── حالات الانتظار ──────────────────────────────────────────
     state = context.user_data.get("awaiting")
 
     if state == "inquiry":
@@ -814,13 +851,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         iid = save_inquiry(uid, user.username, user.first_name, txt)
         log_activity(uid, "inquiry", str(iid))
         await update.message.reply_text(
-            "✅ *تم إرسال استفسارك بنجاح!*\n\nسيرد عليك أحد المشرفين قريباً إن شاء الله 🌟",
+            "✅ *تم إرسال استفسارك بنجاح!*\n\nسيرد عليك المشرف قريباً إن شاء الله 🌿",
             parse_mode=ParseMode.MARKDOWN, reply_markup=get_main_keyboard(uid))
         for adm in get_all_admins():
             try:
                 await context.bot.send_message(
                     adm,
-                    f"📩 *استفسار جديد #{iid}*\n👤 من: {user.first_name} (@{user.username})\n\n{txt}",
+                    f"📨 *استفسار جديد #{iid}*\n"
+                    f"👤 {user.first_name} (@{user.username})\n\n"
+                    f"💬 {txt}",
                     parse_mode=ParseMode.MARKDOWN)
             except: pass
         return
@@ -829,36 +868,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.pop("awaiting", None)
         parts = txt.split("|", 1)
         if len(parts) < 2:
-            await update.message.reply_text("⚠️ الصيغة: نص الحديث | المصدر", reply_markup=get_main_keyboard(uid))
-            return
+            await update.message.reply_text("⚠️ الصيغة: نص الحديث | المصدر", reply_markup=get_main_keyboard(uid)); return
         con = sqlite3.connect(DB_PATH)
         con.execute("INSERT INTO hadiths (text, source, added_by) VALUES (?,?,?)", (parts[0].strip(), parts[1].strip(), uid))
         con.commit(); con.close()
-        await update.message.reply_text("✅ تم إضافة الحديث.", reply_markup=get_main_keyboard(uid))
-        return
+        await update.message.reply_text("✅ تم إضافة الحديث.", reply_markup=get_main_keyboard(uid)); return
 
     if state == "adm_add_dua":
         context.user_data.pop("awaiting", None)
         parts = txt.split("|", 1)
         if len(parts) < 2:
-            await update.message.reply_text("⚠️ الصيغة: نص الدعاء | المصدر", reply_markup=get_main_keyboard(uid))
-            return
+            await update.message.reply_text("⚠️ الصيغة: نص الدعاء | المصدر", reply_markup=get_main_keyboard(uid)); return
         con = sqlite3.connect(DB_PATH)
         con.execute("INSERT INTO duas (text, source, added_by) VALUES (?,?,?)", (parts[0].strip(), parts[1].strip(), uid))
         con.commit(); con.close()
-        await update.message.reply_text("✅ تم إضافة الدعاء.", reply_markup=get_main_keyboard(uid))
-        return
+        await update.message.reply_text("✅ تم إضافة الدعاء.", reply_markup=get_main_keyboard(uid)); return
 
     if state == "adm_del_hadith":
         context.user_data.pop("awaiting", None)
         try:
             hid = int(txt)
             con = sqlite3.connect(DB_PATH)
-            con.execute("DELETE FROM hadiths WHERE id=?", (hid,))
-            con.commit(); con.close()
-            await update.message.reply_text(f"✅ تم حذف الحديث رقم {hid}.", reply_markup=get_main_keyboard(uid))
+            con.execute("DELETE FROM hadiths WHERE id=?", (hid,)); con.commit(); con.close()
+            await update.message.reply_text(f"✅ تم حذف الحديث #{hid}.", reply_markup=get_main_keyboard(uid))
         except:
-            await update.message.reply_text("⚠️ أرسل رقم الحديث فقط.", reply_markup=get_main_keyboard(uid))
+            await update.message.reply_text("⚠️ أرسل رقم الحديث الصحيح.", reply_markup=get_main_keyboard(uid))
         return
 
     if state == "adm_del_dua":
@@ -866,36 +900,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             did = int(txt)
             con = sqlite3.connect(DB_PATH)
-            con.execute("DELETE FROM duas WHERE id=?", (did,))
-            con.commit(); con.close()
-            await update.message.reply_text(f"✅ تم حذف الدعاء رقم {did}.", reply_markup=get_main_keyboard(uid))
+            con.execute("DELETE FROM duas WHERE id=?", (did,)); con.commit(); con.close()
+            await update.message.reply_text(f"✅ تم حذف الدعاء #{did}.", reply_markup=get_main_keyboard(uid))
         except:
-            await update.message.reply_text("⚠️ أرسل رقم الدعاء فقط.", reply_markup=get_main_keyboard(uid))
+            await update.message.reply_text("⚠️ أرسل رقم الدعاء الصحيح.", reply_markup=get_main_keyboard(uid))
         return
 
     if state == "adm_add_content":
         context.user_data.pop("awaiting", None)
         parts = txt.split("|", 2)
         if len(parts) < 3:
-            await update.message.reply_text("⚠️ الصيغة: الفئة | النص | المصدر", reply_markup=get_main_keyboard(uid))
-            return
+            await update.message.reply_text("⚠️ الصيغة: التصنيف | النص | المصدر", reply_markup=get_main_keyboard(uid)); return
         con = sqlite3.connect(DB_PATH)
-        con.execute("INSERT INTO bot_content (category, text, source, added_by) VALUES (?,?,?,?)",
-                    (parts[0].strip(), parts[1].strip(), parts[2].strip(), uid))
+        con.execute("INSERT INTO bot_content (category, text, source, added_by) VALUES (?,?,?,?)", (parts[0].strip(), parts[1].strip(), parts[2].strip(), uid))
         con.commit(); con.close()
-        await update.message.reply_text("✅ تم إضافة المحتوى.", reply_markup=get_main_keyboard(uid))
-        return
+        await update.message.reply_text("✅ تم إضافة المحتوى.", reply_markup=get_main_keyboard(uid)); return
 
     if state == "adm_del_content":
         context.user_data.pop("awaiting", None)
         try:
             cid = int(txt)
             con = sqlite3.connect(DB_PATH)
-            con.execute("DELETE FROM bot_content WHERE id=?", (cid,))
-            con.commit(); con.close()
-            await update.message.reply_text(f"✅ تم حذف المحتوى رقم {cid}.", reply_markup=get_main_keyboard(uid))
+            con.execute("DELETE FROM bot_content WHERE id=?", (cid,)); con.commit(); con.close()
+            await update.message.reply_text(f"✅ تم حذف المحتوى #{cid}.", reply_markup=get_main_keyboard(uid))
         except:
-            await update.message.reply_text("⚠️ أرسل رقم المحتوى فقط.", reply_markup=get_main_keyboard(uid))
+            await update.message.reply_text("⚠️ أرسل رقم المحتوى الصحيح.", reply_markup=get_main_keyboard(uid))
         return
 
     if state == "adm_add_admin":
@@ -903,11 +932,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             new_adm = int(txt)
             con = sqlite3.connect(DB_PATH)
-            con.execute("UPDATE users SET is_admin=1 WHERE user_id=?", (new_adm,))
-            con.commit(); con.close()
+            con.execute("UPDATE users SET is_admin=1 WHERE user_id=?", (new_adm,)); con.commit(); con.close()
             await update.message.reply_text(f"✅ تم تعيين {new_adm} مشرفاً.", reply_markup=get_main_keyboard(uid))
         except:
-            await update.message.reply_text("⚠️ أرسل ID المستخدم.", reply_markup=get_main_keyboard(uid))
+            await update.message.reply_text("⚠️ أرسل ID صحيح.", reply_markup=get_main_keyboard(uid))
         return
 
     if state == "adm_del_admin":
@@ -915,35 +943,33 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             rem_adm = int(txt)
             delete_admin(rem_adm)
-            await update.message.reply_text(f"✅ تم إزالة صلاحيات {rem_adm}.", reply_markup=get_main_keyboard(uid))
+            await update.message.reply_text(f"✅ تم إزالة صلاحية {rem_adm}.", reply_markup=get_main_keyboard(uid))
         except:
-            await update.message.reply_text("⚠️ أرسل ID المستخدم.", reply_markup=get_main_keyboard(uid))
+            await update.message.reply_text("⚠️ أرسل ID صحيح.", reply_markup=get_main_keyboard(uid))
         return
 
     if state == "adm_ban":
         context.user_data.pop("awaiting", None)
         try:
-            ban_uid = int(txt)
-            ban_user(ban_uid)
-            await update.message.reply_text(f"🚫 تم حظر {ban_uid}.", reply_markup=get_main_keyboard(uid))
+            ban_uid = int(txt); ban_user(ban_uid)
+            await update.message.reply_text(f"✅ تم حظر {ban_uid}.", reply_markup=get_main_keyboard(uid))
         except:
-            await update.message.reply_text("⚠️ أرسل ID المستخدم.", reply_markup=get_main_keyboard(uid))
+            await update.message.reply_text("⚠️ أرسل ID صحيح.", reply_markup=get_main_keyboard(uid))
         return
 
     if state == "adm_unban":
         context.user_data.pop("awaiting", None)
         try:
-            uban_uid = int(txt)
-            unban_user(uban_uid)
-            await update.message.reply_text(f"✅ تم رفع الحظر عن {uban_uid}.", reply_markup=get_main_keyboard(uid))
+            uban_uid = int(txt); unban_user(uban_uid)
+            await update.message.reply_text(f"✅ تم رفع حظر {uban_uid}.", reply_markup=get_main_keyboard(uid))
         except:
-            await update.message.reply_text("⚠️ أرسل ID المستخدم.", reply_markup=get_main_keyboard(uid))
+            await update.message.reply_text("⚠️ أرسل ID صحيح.", reply_markup=get_main_keyboard(uid))
         return
 
     if state == "adm_send_user":
         context.user_data["adm_send_msg"] = txt
         context.user_data["awaiting"] = "adm_send_uid"
-        await update.message.reply_text("📩 أرسل ID المستخدم الذي تريد مراسلته:")
+        await update.message.reply_text("📩 الآن أرسل ID المستخدم:")
         return
 
     if state == "adm_send_uid":
@@ -954,19 +980,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(target_uid, f"📩 *رسالة من الإدارة:*\n\n{msg_to_send}", parse_mode=ParseMode.MARKDOWN)
             await update.message.reply_text("✅ تم الإرسال.", reply_markup=get_main_keyboard(uid))
         except:
-            await update.message.reply_text("⚠️ تعذّر الإرسال. تأكد من ID المستخدم.", reply_markup=get_main_keyboard(uid))
+            await update.message.reply_text("⚠️ تعذّر الإرسال. تحقق من ID.", reply_markup=get_main_keyboard(uid))
         return
 
     if state == "adm_broadcast":
         context.user_data.pop("awaiting", None)
-        all_users = get_all_users()
-        success = 0
+        all_users = get_all_users(); success = 0
         for u in all_users:
             try:
                 await context.bot.send_message(u, f"📢 *إعلان من الإدارة:*\n\n{txt}", parse_mode=ParseMode.MARKDOWN)
                 success += 1
             except: pass
-        await update.message.reply_text(f"✅ تم الإرسال لـ {success}/{len(all_users)} مستخدم.", reply_markup=get_main_keyboard(uid))
+        await update.message.reply_text(f"✅ تم الإرسال لـ {success}/{len(all_users)}.", reply_markup=get_main_keyboard(uid))
         return
 
     if state == "adm_reply":
@@ -978,21 +1003,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 try:
                     await context.bot.send_message(
                         target,
-                        f"📩 *رد الإدارة على استفسارك:*\n\n{txt}",
+                        f"📨 *رد الإدارة على استفسارك:*\n\n{txt}",
                         parse_mode=ParseMode.MARKDOWN)
                 except: pass
             await update.message.reply_text("✅ تم إرسال الرد.", reply_markup=get_main_keyboard(uid))
         return
 
-    # ── القائمة الرئيسية ──────────────────────────────────────────
+    # ── القائمة الرئيسية ─────────────────────────────────────────
     log_activity(uid, "menu", txt)
 
-    if txt in ("📖 القرآن الكريم", "القرآن الكريم"):
+    if txt in ["📖 القرآن الكريم"]:
         await update.message.reply_text(
-            "📖 *القرآن الكريم*\n\nاختر الرواية أو آية عشوائية:",
+            "📖 *القرآن الكريم*\n\nاختر رواية القراءة:",
             parse_mode=ParseMode.MARKDOWN, reply_markup=build_quran_keyboard())
 
-    elif txt in ("🌿 الورد اليومي", "الورد اليومي"):
+    elif txt in ["🌿 الورد اليومي"]:
         surah, ayah = get_wird_progress(uid)
         total_ayahs = SURAH_AYAH_COUNT.get(surah, 286)
         next_ayah   = ayah + 1
@@ -1003,171 +1028,171 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         surah_name = SURAH_NAMES.get(surah, "")
         msg = (
             f"🌿 *الورد اليومي*\n\n"
-            f"📖 سورة {surah_name} ({surah}) — الآية {next_ayah}/{total_ayahs}\n\n"
-            f"{text_msg if text_msg else '⚠️ تعذّر جلب الآية، حاول لاحقاً.'}"
+            f"📖 سورة *{surah_name}* ({surah}) — آية {next_ayah}/{total_ayahs}\n\n"
+            f"{text_msg}" if text_msg else "⚠️ تعذّر تحميل الآية."
         )
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("▶️ الآية التالية", callback_data=f"wird_next_{surah}_{next_ayah}"),
-             InlineKeyboardButton("🔄 إعادة من البداية", callback_data="wird_restart")],
+            [InlineKeyboardButton("▶️ التالية", callback_data=f"wird_next_{surah}_{next_ayah}")],
+            [InlineKeyboardButton("🔄 إعادة من البداية", callback_data="wird_restart")],
             [back_btn("main_menu")],
         ])
         await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
 
-    elif txt in ("📿 التسبيح", "التسبيح"):
+    elif txt in ["📿 التسبيح"]:
         phrase_idx, counter = get_tasbih_session(uid)
         await update.message.reply_text(
             "📿 *التسبيح*\n\nاختر ذكراً للتسبيح:",
             parse_mode=ParseMode.MARKDOWN, reply_markup=build_tasbih_list_keyboard())
 
-    elif txt in ("🌅 أذكار الصباح", "أذكار الصباح"):
+    elif txt in ["🌅 أذكار الصباح"]:
         idx = get_adhkar_progress(uid, "morning")
-        await update.message.reply_text(
-            "🌅 *أذكار الصباح*\n\nبارك الله في صباحك ✨",
-            parse_mode=ParseMode.MARKDOWN)
         class FakeQuery:
             def __init__(self, msg): self.message = msg
         await show_adhkar_item(FakeQuery(update.message), "morning", MORNING_ADHKAR, idx, 0)
 
-    elif txt in ("🌆 أذكار المساء", "أذكار المساء"):
+    elif txt in ["🌆 أذكار المساء"]:
         idx = get_adhkar_progress(uid, "evening")
         class FakeQuery:
             def __init__(self, msg): self.message = msg
         await show_adhkar_item(FakeQuery(update.message), "evening", EVENING_ADHKAR, idx, 0)
 
-    elif txt in ("🌙 أذكار النوم", "أذكار النوم"):
+    elif txt in ["🌙 أذكار النوم"]:
         idx = get_adhkar_progress(uid, "sleep")
         class FakeQuery:
             def __init__(self, msg): self.message = msg
         await show_adhkar_item(FakeQuery(update.message), "sleep", SLEEP_ADHKAR, idx, 0)
 
-    elif txt in ("✨ أذكار اليقظة", "أذكار اليقظة"):
+    elif txt in ["✨ أذكار الاستيقاظ"]:   # ← تم التغيير هنا
         idx = get_adhkar_progress(uid, "wakeup")
         class FakeQuery:
             def __init__(self, msg): self.message = msg
         await show_adhkar_item(FakeQuery(update.message), "wakeup", WAKEUP_ADHKAR, idx, 0)
 
-    elif txt in ("💧 أذكار الوضوء", "أذكار الوضوء"):
+    elif txt in ["🕌 أذكار الصلاة"]:
+        await update.message.reply_text(
+            "🕌 *أذكار الصلاة*\n\nاختر:",
+            parse_mode=ParseMode.MARKDOWN, reply_markup=build_prayer_adhkar_keyboard())
+
+    elif txt in ["🌺 أدعية خاصة"]:
+        await update.message.reply_text(
+            "🌺 *أدعية خاصة*\n\nاختر الدعاء:",
+            parse_mode=ParseMode.MARKDOWN, reply_markup=build_special_duas_keyboard())
+
+    elif txt in ["🌸 أحكام المرأة"]:
+        await update.message.reply_text(
+            "🌸 *أحكام المرأة*\n\nاختر الدعاء:",
+            parse_mode=ParseMode.MARKDOWN, reply_markup=build_woman_adhkar_keyboard())
+
+    elif txt in ["⭐ سنن يوم الجمعة"]:
+        await update.message.reply_text(
+            "⭐ *سنن يوم الجمعة*\n\nاختر:",
+            parse_mode=ParseMode.MARKDOWN, reply_markup=build_friday_keyboard())
+
+    elif txt in ["💧 أذكار الوضوء"]:
         idx = get_adhkar_progress(uid, "wudu")
         class FakeQuery:
             def __init__(self, msg): self.message = msg
         await show_adhkar_item(FakeQuery(update.message), "wudu", WUDU_ADHKAR, idx, 0)
 
-    elif txt in ("🕌 أذكار الصلاة", "أذكار الصلاة"):
-        await update.message.reply_text(
-            "🕌 *أذكار الصلاة*\n\nاختر الجزء الذي تريد:",
-            parse_mode=ParseMode.MARKDOWN, reply_markup=build_prayer_adhkar_keyboard())
-
-    elif txt in ("🌺 أدعية خاصة", "أدعية خاصة"):
-        await update.message.reply_text(
-            "🌺 *أدعية خاصة*\n\nاختر الدعاء الذي تريد:",
-            parse_mode=ParseMode.MARKDOWN, reply_markup=build_special_duas_keyboard())
-
-    elif txt in ("🌸 أحكام المرأة", "أحكام المرأة"):
-        await update.message.reply_text(
-            "🌸 *أحكام وأذكار المرأة المسلمة*\n\nاختر الدعاء:",
-            parse_mode=ParseMode.MARKDOWN, reply_markup=build_woman_adhkar_keyboard())
-
-    elif txt in ("⭐ سنن يوم الجمعة", "سنن يوم الجمعة"):
-        await update.message.reply_text(
-            "⭐ *سنن يوم الجمعة المبارك*\n\nاختر ما تريد:",
-            parse_mode=ParseMode.MARKDOWN, reply_markup=build_friday_keyboard())
-
-    elif txt in ("🕐 أوقات الصلاة", "أوقات الصلاة"):
+    elif txt in ["🕐 أوقات الصلاة"]:
         city = get_user_city(uid)
         if city:
             msg = await fetch_prayer_times(city)
-            kb  = InlineKeyboardMarkup([[InlineKeyboardButton("🔄 تغيير المدينة", callback_data="change_city")],
-                                        [back_btn("main_menu")]])
+            kb  = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔄 تغيير المدينة", callback_data="change_city")],
+                [back_btn("main_menu")],
+            ])
             await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
         else:
             await update.message.reply_text(
                 "🕐 *أوقات الصلاة*\n\nاختر مدينتك:",
                 parse_mode=ParseMode.MARKDOWN, reply_markup=build_city_keyboard())
 
-    elif txt in ("📅 التاريخ اليوم", "التاريخ اليوم"):
+    elif txt in ["📅 التاريخ اليوم"]:
         msg = await fetch_dates()
-        await update.message.reply_text(f"📅 *التاريخ اليوم*\n\n{msg}", parse_mode=ParseMode.MARKDOWN,
-                                        reply_markup=get_main_keyboard(uid))
+        await update.message.reply_text(f"📅 {msg}", parse_mode=ParseMode.MARKDOWN, reply_markup=get_main_keyboard(uid))
 
-    elif txt in ("📚 حديث اليوم", "حديث اليوم"):
+    elif txt in ["📚 حديث اليوم"]:
         row = get_random_hadith()
         if row:
             await update.message.reply_text(
-                f"📚 *حديث اليوم*\n\n{row[0]}\n\n_📌 المصدر: {row[1]}_",
+                f"📚 *حديث اليوم*\n\n{row[0]}\n\n📌 _{row[1]}_",
                 parse_mode=ParseMode.MARKDOWN, reply_markup=get_main_keyboard(uid))
         else:
-            await update.message.reply_text("⚠️ لا توجد أحاديث مضافة بعد.", reply_markup=get_main_keyboard(uid))
+            await update.message.reply_text("⚠️ لا توجد أحاديث بعد.", reply_markup=get_main_keyboard(uid))
 
-    elif txt in ("🤲 دعاء اليوم", "دعاء اليوم"):
+    elif txt in ["🤲 دعاء اليوم"]:
         row = get_random_dua()
         if row:
             await update.message.reply_text(
-                f"🤲 *دعاء اليوم*\n\n{row[0]}\n\n_📌 المصدر: {row[1]}_",
+                f"🤲 *دعاء اليوم*\n\n{row[0]}\n\n📌 _{row[1]}_",
                 parse_mode=ParseMode.MARKDOWN, reply_markup=get_main_keyboard(uid))
         else:
-            await update.message.reply_text("⚠️ لا توجد أدعية مضافة بعد.", reply_markup=get_main_keyboard(uid))
+            await update.message.reply_text("⚠️ لا توجد أدعية بعد.", reply_markup=get_main_keyboard(uid))
 
-    elif txt in ("🎓 الدورات المجانية", "الدورات المجانية"):
+    elif txt in ["🎓 الدورات المجانية"]:
         courses = (
             "🎓 *الدورات الإسلامية المجانية*\n\n"
-            "🌐 [أكاديمية إسلام هاوس](https://islamhouse.com)\n"
-            "🌐 [موقع الإسلام سؤال وجواب](https://islamqa.info/ar)\n"
-            "🌐 [موقع المنهاج](https://almenhaj.net)\n"
-            "🌐 [تفسير ابن كثير](https://quran.ksu.edu.sa)\n"
-            "🌐 [موسوعة الحديث](https://dorar.net/hadith)\n\n"
-            "_جزاك الله خيراً على رحلتك في طلب العلم_ 🌟"
+            "• [أكاديمية إسلام هاوس](https://www.islamhouse.com)\n"
+            "• [موقع الدرر السنية](https://dorar.net)\n"
+            "• [موقع الإسلام سؤال وجواب](https://islamqa.info/ar)\n"
+            "• [موقع طريق الإسلام](https://ar.islamway.net)\n\n"
+            "_بارك الله فيك وأعانك على طلب العلم_ 🌿"
         )
-        await update.message.reply_text(courses, parse_mode=ParseMode.MARKDOWN,
-                                        reply_markup=get_main_keyboard(uid))
+        await update.message.reply_text(courses, parse_mode=ParseMode.MARKDOWN, reply_markup=get_main_keyboard(uid))
 
-    elif txt in ("📊 إحصائياتي", "إحصائياتي"):
+    elif txt in ["📊 إحصائياتي"]:
         stats = get_user_full_stats(uid)
         surah_name = SURAH_NAMES.get(stats["wird_surah"], "")
         msg = (
             f"📊 *إحصائياتك*\n\n"
-            f"📖 الورد: سورة {surah_name} — الآية {stats['wird_ayah']}\n"
+            f"🌿 الورد: سورة *{surah_name}* — آية {stats['wird_ayah']}\n"
             f"📿 إجمالي التسبيح: {stats['total_t']}\n"
-            f"🕌 السور المقروءة: {stats['surahs_done']}\n"
-            f"💬 الاستفسارات: {stats['inquiries']}\n"
+            f"📖 السور المكتملة: {stats['surahs_done']}\n"
+            f"💬 استفساراتك: {stats['inquiries']}\n"
         )
         if stats["tasbih"]:
-            msg += "\n*🏆 أكثر التسابيح:*\n"
+            msg += "\n*أكثر التسابيح:*\n"
             for phrase, total in stats["tasbih"]:
                 msg += f"  • {phrase}: {total}\n"
         await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN, reply_markup=get_main_keyboard(uid))
 
-    elif txt in ("💬 استفسار", "استفسار"):
+    elif txt in ["💬 استفسار"]:
         context.user_data["awaiting"] = "inquiry"
         await update.message.reply_text(
-            "💬 *استفسار*\n\nاكتب استفسارك وسيصل للإدارة مباشرة:",
+            "💬 *استفسار*\n\nاكتب استفسارك وسيصل إلى الإدارة مباشرةً.\n\n"
+            "اضغط /cancel للإلغاء أو أرسل استفسارك الآن:",
             parse_mode=ParseMode.MARKDOWN,
-            reply_markup=ReplyKeyboardRemove())
+            reply_markup=ReplyKeyboardMarkup([["❌ إلغاء"]], resize_keyboard=True))
 
-    elif txt in ("ℹ️ المساعدة", "المساعدة"):
+    elif txt in ["❌ إلغاء"]:
+        context.user_data.pop("awaiting", None)
+        await update.message.reply_text(
+            "✅ تم الإلغاء.", reply_markup=get_main_keyboard(uid))
+
+    elif txt in ["ℹ️ المساعدة"]:
         await cmd_help(update, context)
 
-    elif txt in ("⚙️ لوحة الإدارة", "لوحة الإدارة"):
+    elif txt in ["⚙️ لوحة الإدارة"]:
         if not is_admin(uid):
-            await update.message.reply_text("⛔ غير مصرح لك.", reply_markup=get_main_keyboard(uid))
-            return
+            await update.message.reply_text("⚠️ ليس لديك صلاحية.", reply_markup=get_main_keyboard(uid)); return
         stats = get_admin_stats()
         msg = (
-            f"⚙️ *لوحة تحكم الإدارة*\n\n"
-            f"👥 المستخدمون: {stats['users']} | 🚫 محظور: {stats['banned']}\n"
+            f"⚙️ *لوحة الإدارة*\n\n"
+            f"👥 المستخدمون: {stats['users']} | 🚫 محظورون: {stats['banned']}\n"
             f"🟢 نشطون اليوم: {stats['active_today']} | 👤 مشرفون: {stats['admins']}\n"
-            f"📚 الأحاديث: {stats['hadiths']} | 🤲 الأدعية: {stats['duas']}\n"
-            f"📋 محتوى: {stats['content']} | 📿 إجمالي تسبيح: {stats['tasbih_total']}\n"
-            f"💬 معلقة: {stats['pending']} | ✅ مُجاب: {stats['replied']}"
+            f"📚 أحاديث: {stats['hadiths']} | 🤲 أدعية: {stats['duas']}\n"
+            f"📝 محتوى: {stats['content']} | 📿 تسبيح: {stats['tasbih_total']}\n"
+            f"💬 معلق: {stats['pending']} | ✅ مُجاب: {stats['replied']}"
         )
-        await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN,
-                                        reply_markup=build_admin_keyboard())
+        await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN, reply_markup=build_admin_keyboard())
+
     else:
         await update.message.reply_text(
-            "🌟 استخدم القائمة للتنقل بين الأقسام.",
-            reply_markup=get_main_keyboard(uid))
+            "🌿 اختر من القائمة أدناه:", reply_markup=get_main_keyboard(uid))
 
 # ══════════════════════════════════════════════════════════════════
-# Callback Query Handler
+# Handler — Callback Queries
 # ══════════════════════════════════════════════════════════════════
 @banned_check
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1176,20 +1201,16 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid  = query.from_user.id
     data = query.data
 
-    # ── القائمة الرئيسية ──────────────────────────────────────────
+    # ── رجوع للقائمة الرئيسية ────────────────────────────────────
     if data == "main_menu":
-        await query.message.reply_text(
-            "🌟 *القائمة الرئيسية*",
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=get_main_keyboard(uid))
+        await query.message.reply_text("🌿 القائمة الرئيسية:", reply_markup=get_main_keyboard(uid))
         try: await query.message.delete()
         except: pass
         return
 
-    # ── القرآن الكريم ─────────────────────────────────────────────
+    # ── القرآن — اختيار الرواية ──────────────────────────────────
     if data == "quran_back":
-        await safe_edit(query, "📖 *القرآن الكريم*\n\nاختر الرواية أو آية عشوائية:",
-                        reply_markup=build_quran_keyboard())
+        await safe_edit(query, "📖 *القرآن الكريم*\n\nاختر رواية القراءة:", reply_markup=build_quran_keyboard())
         return
 
     if data == "quran_random":
@@ -1198,8 +1219,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         txt = await fetch_quran_ayah(s, a)
         msg = (
             f"🎲 *آية عشوائية*\n\n"
-            f"📖 سورة {SURAH_NAMES[s]} ({s}) — آية {a}\n\n"
-            f"{txt if txt else '⚠️ تعذّر جلب الآية.'}"
+            f"📖 سورة *{SURAH_NAMES[s]}* — آية {a}\n\n"
+            f"{txt}" if txt else "⚠️ تعذّر تحميل الآية."
         )
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("🎲 آية أخرى", callback_data="quran_random")],
@@ -1208,103 +1229,119 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await safe_edit(query, msg, reply_markup=kb)
         return
 
-    # sp_PAGE_RIWAYA — صفحات السور
+    # ── القرآن — قائمة السور (صفحات) ────────────────────────────
     if data.startswith("sp_"):
-        parts = data.split("_")
-        page, riwaya = int(parts[1]), parts[2]
+        parts  = data.split("_")
+        page   = int(parts[1])
+        riwaya = parts[2]
+        riwaya_name = "حفص عن عاصم" if riwaya == "hafs" else "ورش عن نافع"
         await safe_edit(
             query,
-            f"📖 *اختر السورة — {'حفص' if riwaya == 'hafs' else 'ورش'}*",
+            f"📖 *رواية {riwaya_name}*\n\nاختر السورة:",
             reply_markup=build_surah_keyboard(page, riwaya))
         return
 
-    # ss_SURAH_RIWAYA — اختيار سورة
+    # ── القرآن — اختيار سورة → خيارات البداية ───────────────────
     if data.startswith("ss_"):
         parts  = data.split("_")
         surah  = int(parts[1])
         riwaya = parts[2]
+        surah_name = SURAH_NAMES.get(surah, "")
+        total  = SURAH_AYAH_COUNT.get(surah, 1)
         last   = get_surah_progress(uid, surah, riwaya)
-        start_ayah = last + 1 if last > 0 else 1
-        if start_ayah > SURAH_AYAH_COUNT[surah]:
-            start_ayah = 1
-        txt_ayah = await fetch_quran_ayah(surah, start_ayah, riwaya)
-        total    = SURAH_AYAH_COUNT[surah]
+        riwaya_name = "حفص" if riwaya == "hafs" else "ورش"
         msg = (
-            f"📖 *سورة {SURAH_NAMES[surah]}* ({'حفص' if riwaya == 'hafs' else 'ورش'})\n"
-            f"الآية {start_ayah}/{total}\n\n"
-            f"{txt_ayah if txt_ayah else '⚠️ تعذّر جلب الآية.'}"
+            f"📖 *سورة {surah_name}*\n"
+            f"رواية: {riwaya_name} | عدد الآيات: {total}\n\n"
+            f"من أين تريد البدء؟"
         )
-        kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("▶️ التالية", callback_data=f"read_{surah}_{start_ayah}_{riwaya}"),
-             InlineKeyboardButton("💾 حفظ", callback_data=f"save_surah_{surah}_{start_ayah}_{riwaya}")],
-            [back_btn(f"sp_0_{riwaya}")],
-        ])
-        await safe_edit(query, msg, reply_markup=kb)
+        await safe_edit(query, msg, reply_markup=build_surah_start_keyboard(uid, surah, riwaya))
         return
 
-    # read_SURAH_AYAH_RIWAYA — قراءة الآيات
+    # ── القرآن — اختيار آية معينة (صفحات الأرقام) ───────────────
+    if data.startswith("choose_ayah_"):
+        parts  = data.split("_")
+        surah  = int(parts[2])
+        riwaya = parts[3]
+        surah_name = SURAH_NAMES.get(surah, "")
+        await safe_edit(
+            query,
+            f"🔢 *سورة {surah_name}* — اختر رقم الآية:",
+            reply_markup=build_ayah_choice_keyboard(surah, riwaya, 0))
+        return
+
+    if data.startswith("ayah_page_"):
+        parts  = data.split("_")
+        surah  = int(parts[2])
+        riwaya = parts[3]
+        page   = int(parts[4])
+        surah_name = SURAH_NAMES.get(surah, "")
+        await safe_edit(
+            query,
+            f"🔢 *سورة {surah_name}* — اختر رقم الآية:",
+            reply_markup=build_ayah_choice_keyboard(surah, riwaya, page))
+        return
+
+    # ── القرآن — قراءة آية ───────────────────────────────────────
     if data.startswith("read_"):
         parts  = data.split("_")
         surah  = int(parts[1])
         ayah   = int(parts[2])
         riwaya = parts[3]
-        next_a = ayah + 1
         total  = SURAH_AYAH_COUNT[surah]
-        if next_a > total:
+        if ayah > total:
             save_surah_progress(uid, surah, total, riwaya)
-            msg = f"✅ *أتممت سورة {SURAH_NAMES[surah]} بأكملها!*\n\nبارك الله فيك 🌟"
+            msg = f"📖 سورة *{SURAH_NAMES[surah]}* — ✅ أتممت قراءة السورة!"
             kb  = InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔄 إعادة من البداية", callback_data=f"ss_{surah}_{riwaya}")],
-                [back_btn(f"sp_0_{riwaya}")],
+                [InlineKeyboardButton("📖 سورة أخرى", callback_data=f"sp_0_{riwaya}")],
+                [back_btn("main_menu")],
             ])
             await safe_edit(query, msg, reply_markup=kb)
             return
-        txt_ayah = await fetch_quran_ayah(surah, next_a, riwaya)
+        txt_ayah = await fetch_quran_ayah(surah, ayah, riwaya)
+        riwaya_name = "حفص" if riwaya == "hafs" else "ورش"
         msg = (
-            f"📖 *سورة {SURAH_NAMES[surah]}* ({'حفص' if riwaya == 'hafs' else 'ورش'})\n"
-            f"الآية {next_a}/{total}\n\n"
-            f"{txt_ayah if txt_ayah else '⚠️ تعذّر جلب الآية.'}"
+            f"📖 *سورة {SURAH_NAMES[surah]}* — رواية {riwaya_name}\n"
+            f"آية {ayah}/{total}\n\n"
+            f"{txt_ayah}" if txt_ayah else "⚠️ تعذّر تحميل الآية."
         )
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("▶️ التالية", callback_data=f"read_{surah}_{next_a}_{riwaya}"),
-             InlineKeyboardButton("💾 حفظ", callback_data=f"save_surah_{surah}_{next_a}_{riwaya}")],
-            [back_btn(f"sp_0_{riwaya}")],
+            [InlineKeyboardButton("▶️ التالية", callback_data=f"read_{surah}_{ayah+1}_{riwaya}")],
+            [InlineKeyboardButton("💾 حفظ وخروج", callback_data=f"save_surah_{surah}_{ayah}_{riwaya}")],
+            [back_btn(f"ss_{surah}_{riwaya}")],
         ])
         await safe_edit(query, msg, reply_markup=kb)
         return
 
-    # save_surah_SURAH_AYAH_RIWAYA
     if data.startswith("save_surah_"):
         parts  = data.split("_")
         surah  = int(parts[2])
         ayah   = int(parts[3])
         riwaya = parts[4]
         save_surah_progress(uid, surah, ayah, riwaya)
-        await query.answer(f"✅ تم حفظ موضع القراءة: سورة {SURAH_NAMES[surah]} آية {ayah}", show_alert=True)
+        await query.answer(f"✅ تم حفظ تقدمك عند آية {ayah}", show_alert=True)
         return
 
-    # ── الورد اليومي ──────────────────────────────────────────────
+    # ── الورد اليومي ─────────────────────────────────────────────
     if data.startswith("wird_next_"):
         parts = data.split("_")
-        surah = int(parts[2])
-        ayah  = int(parts[3])
+        surah = int(parts[2]); ayah = int(parts[3])
         save_wird_progress(uid, surah, ayah)
-        total = SURAH_AYAH_COUNT.get(surah, 286)
-        next_a = ayah + 1
-        if next_a > total:
-            surah += 1; next_a = 1
-            if surah > 114: surah = 1
-        txt_ayah = await fetch_quran_ayah(surah, next_a)
-        surah_name = SURAH_NAMES.get(surah, "")
         total2 = SURAH_AYAH_COUNT.get(surah, 286)
+        nexta  = ayah + 1
+        if nexta > total2:
+            surah += 1; nexta = 1
+            if surah > 114: surah = 1
+        txt_ayah   = await fetch_quran_ayah(surah, nexta)
+        surah_name = SURAH_NAMES.get(surah, "")
         msg = (
             f"🌿 *الورد اليومي*\n\n"
-            f"📖 سورة {surah_name} ({surah}) — الآية {next_a}/{total2}\n\n"
-            f"{txt_ayah if txt_ayah else '⚠️ تعذّر جلب الآية.'}"
+            f"📖 سورة *{surah_name}* ({surah}) — آية {nexta}/{total2}\n\n"
+            f"{txt_ayah}" if txt_ayah else "⚠️ تعذّر تحميل الآية."
         )
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("▶️ الآية التالية", callback_data=f"wird_next_{surah}_{next_a}"),
-             InlineKeyboardButton("🔄 إعادة من البداية", callback_data="wird_restart")],
+            [InlineKeyboardButton("▶️ التالية", callback_data=f"wird_next_{surah}_{nexta}")],
+            [InlineKeyboardButton("🔄 إعادة من البداية", callback_data="wird_restart")],
             [back_btn("main_menu")],
         ])
         await safe_edit(query, msg, reply_markup=kb)
@@ -1312,233 +1349,90 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "wird_restart":
         save_wird_progress(uid, 2, 0)
-        await query.answer("🔄 تم إعادة الورد من سورة البقرة", show_alert=True)
+        await query.answer("✅ تم إعادة الورد من البداية", show_alert=True)
         txt_ayah = await fetch_quran_ayah(2, 1)
         msg = (
-            f"🌿 *الورد اليومي*\n\n"
-            f"📖 سورة البقرة (2) — الآية 1/{SURAH_AYAH_COUNT[2]}\n\n"
-            f"{txt_ayah if txt_ayah else '⚠️ تعذّر جلب الآية.'}"
+            f"🌿 *الورد اليومي — من البداية*\n\n"
+            f"📖 سورة *البقرة* (2) — آية 1/{SURAH_AYAH_COUNT[2]}\n\n"
+            f"{txt_ayah}" if txt_ayah else "⚠️ تعذّر تحميل الآية."
         )
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("▶️ الآية التالية", callback_data="wird_next_2_1"),
-             InlineKeyboardButton("🔄 إعادة من البداية", callback_data="wird_restart")],
+            [InlineKeyboardButton("▶️ التالية", callback_data="wird_next_2_1")],
+            [InlineKeyboardButton("🔄 إعادة من البداية", callback_data="wird_restart")],
             [back_btn("main_menu")],
         ])
         await safe_edit(query, msg, reply_markup=kb)
         return
 
-    # ── أوقات الصلاة ──────────────────────────────────────────────
-    if data.startswith("city_"):
-        city = data[5:]
-        save_user_city(uid, city)
-        msg = await fetch_prayer_times(city)
-        kb  = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔄 تغيير المدينة", callback_data="change_city")],
-            [back_btn("main_menu")],
-        ])
-        await safe_edit(query, msg, reply_markup=kb)
-        return
-
-    if data == "change_city":
-        await safe_edit(query, "🕐 *اختر مدينتك:*", reply_markup=build_city_keyboard())
-        return
-
-    # ── أذكار الصلاة ──────────────────────────────────────────────
-    if data.startswith("pr_adhkar_"):
-        key = data[len("pr_adhkar_"):]
-        if key in PRAYER_ADHKAR:
-            lst   = PRAYER_ADHKAR[key]
-            item  = lst[0]
-            text  = f"🕌 *{key}*\n\n{item[0]}\n\n_📌 {item[1]}_"
-            if len(lst) > 1:
-                kb = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("▶️ التالي", callback_data=f"pr_next_{key}_1")],
-                    [back_btn("prayer_adhkar_menu")],
-                ])
-            else:
-                kb = InlineKeyboardMarkup([[back_btn("prayer_adhkar_menu")]])
-            await safe_edit(query, text, reply_markup=kb)
-        return
-
-    if data == "prayer_adhkar_menu":
-        await safe_edit(query, "🕌 *أذكار الصلاة*\n\nاختر الجزء:",
-                        reply_markup=build_prayer_adhkar_keyboard())
-        return
-
-    if data.startswith("pr_next_"):
-        parts = data.split("_", 3)
-        key   = parts[2]
-        idx   = int(parts[3])
-        if key in PRAYER_ADHKAR:
-            lst  = PRAYER_ADHKAR[key]
-            if idx >= len(lst):
-                await safe_edit(query, f"✅ *انتهيت من {key}*\n\nبارك الله فيك 🌟",
-                                reply_markup=InlineKeyboardMarkup([[back_btn("prayer_adhkar_menu")]]))
-                return
-            item = lst[idx]
-            text = f"🕌 *{key}* ({idx+1}/{len(lst)})\n\n{item[0]}\n\n_📌 {item[1]}_"
-            nav  = []
-            if idx + 1 < len(lst):
-                nav.append(InlineKeyboardButton("▶️ التالي", callback_data=f"pr_next_{key}_{idx+1}"))
-            else:
-                nav.append(InlineKeyboardButton("✅ تم", callback_data="prayer_adhkar_menu"))
-            kb = InlineKeyboardMarkup([nav, [back_btn("prayer_adhkar_menu")]])
-            await safe_edit(query, text, reply_markup=kb)
-        return
-
-    # ── أدعية خاصة ────────────────────────────────────────────────
-    if data.startswith("sdua_"):
-        idx   = int(data.split("_")[1])
-        keys  = list(SPECIAL_DUAS.keys())
-        if idx < len(keys):
-            key   = keys[idx]
-            items = SPECIAL_DUAS[key]
-            text  = f"🤲 *{key}*\n\n"
-            for item in items:
-                text += f"{item[0]}\n_📌 {item[1]}_\n\n"
-            kb = InlineKeyboardMarkup([[back_btn("special_duas_menu")]])
-            await safe_edit(query, text.strip(), reply_markup=kb)
-        return
-
-    if data == "special_duas_menu":
-        await safe_edit(query, "🌺 *أدعية خاصة*\n\nاختر الدعاء:",
-                        reply_markup=build_special_duas_keyboard())
-        return
-
-    # ── أحكام المرأة ──────────────────────────────────────────────
-    if data.startswith("wad_"):
-        idx   = int(data.split("_")[1])
-        keys  = list(WOMAN_ADHKAR.keys())
-        if idx < len(keys):
-            key   = keys[idx]
-            items = WOMAN_ADHKAR[key]
-            text  = f"🌸 *{key}*\n\n"
-            for item in items:
-                text += f"{item[0]}\n_📌 {item[1]}_\n\n"
-            kb = InlineKeyboardMarkup([[back_btn("woman_adhkar_menu")]])
-            await safe_edit(query, text.strip(), reply_markup=kb)
-        return
-
-    if data == "woman_adhkar_menu":
-        await safe_edit(query, "🌸 *أحكام وأذكار المرأة*\n\nاختر الدعاء:",
-                        reply_markup=build_woman_adhkar_keyboard())
-        return
-
-    # ── سنن يوم الجمعة ────────────────────────────────────────────
-    if data.startswith("friday_surah_"):
-        surah_num = int(data.split("_")[2])
-        desc      = FRIDAY_SURAHS.get(surah_num, "")
-        txt_ayah  = await fetch_quran_ayah(surah_num, 1)
-        msg = (
-            f"⭐ *{desc}*\n\n"
-            f"📖 سورة {SURAH_NAMES[surah_num]}\n\n"
-            f"{txt_ayah if txt_ayah else '⚠️ تعذّر جلب الآية.'}\n\n"
-            f"_اضغط قراءة السورة في القسم القرآن الكريم_"
-        )
-        await safe_edit(query, msg, reply_markup=InlineKeyboardMarkup([[back_btn("friday_menu")]]))
-        return
-
-    if data.startswith("friday_info_"):
-        idx  = int(data.split("_")[2])
-        if idx < len(FRIDAY_SUNNAN):
-            s    = FRIDAY_SUNNAN[idx]
-            msg  = f"⭐ *{s['title']}*\n\n{s['text']}\n\n_📌 {s['source']}_"
-            await safe_edit(query, msg, reply_markup=InlineKeyboardMarkup([[back_btn("friday_menu")]]))
-        return
-
-    if data == "friday_menu":
-        await safe_edit(query, "⭐ *سنن يوم الجمعة المبارك*\n\nاختر ما تريد:",
-                        reply_markup=build_friday_keyboard())
-        return
-
-    # ── التسبيح ───────────────────────────────────────────────────
+    # ── التسبيح ──────────────────────────────────────────────────
     if data == "tasbih_list":
-        await safe_edit(query, "📿 *التسبيح*\n\nاختر ذكراً للتسبيح:",
-                        reply_markup=build_tasbih_list_keyboard())
+        await safe_edit(query, "📿 *التسبيح*\n\nاختر ذكراً:", reply_markup=build_tasbih_list_keyboard())
         return
 
     if data.startswith("tsb_start_"):
         phrase_idx = int(data.split("_")[2])
         phrase, fad, req = TASBIH_LIST[phrase_idx]
-        _, saved_counter = get_tasbih_session(uid)
-        counter = saved_counter if get_tasbih_session(uid)[0] == phrase_idx else 0
+        saved_idx, saved_counter = get_tasbih_session(uid)
+        counter = saved_counter if saved_idx == phrase_idx else 0
         save_tasbih_session(uid, phrase_idx, counter)
         msg = (
-            f"📿 *التسبيح*\n\n"
-            f"*{phrase}*\n"
+            f"📿 *{phrase}*\n\n"
             f"_{fad}_\n\n"
-            f"الهدف: {req} مرة\n"
-            f"العداد: {counter}/{req}"
+            f"العدد المطلوب: {req}\n"
+            f"تقدمك الحالي: {counter}/{req}"
         )
         await safe_edit(query, msg, reply_markup=build_tasbih_counter_keyboard(phrase_idx, counter, req))
         return
 
     if data.startswith("tsb_count_"):
         parts      = data.split("_")
-        phrase_idx = int(parts[2])
-        counter    = int(parts[3]) + 1
+        phrase_idx = int(parts[2]); counter = int(parts[3]) + 1
         phrase, fad, req = TASBIH_LIST[phrase_idx]
         save_tasbih_session(uid, phrase_idx, counter)
         if counter >= req:
             log_tasbih(uid, phrase, counter)
             motivation = random.choice(MOTIVATION_MSGS)
-            msg = (
-                f"📿 *{phrase}*\n\n"
-                f"✅ *أتممت {req} مرة!*\n\n"
-                f"{motivation}"
-            )
+            msg = f"📿 *{phrase}*\n\n✅ أتممت {req} مرة!\n\n{motivation}"
         else:
             msg = (
-                f"📿 *التسبيح*\n\n"
-                f"*{phrase}*\n"
+                f"📿 *{phrase}*\n\n"
                 f"_{fad}_\n\n"
-                f"الهدف: {req} مرة\n"
-                f"العداد: {counter}/{req}"
+                f"العدد المطلوب: {req}\n"
+                f"تقدمك الحالي: {counter}/{req}"
             )
         await safe_edit(query, msg, reply_markup=build_tasbih_counter_keyboard(phrase_idx, counter, req))
         return
 
     if data.startswith("tsb_save_"):
-        parts      = data.split("_")
-        phrase_idx = int(parts[2])
-        counter    = int(parts[3])
+        parts = data.split("_"); phrase_idx = int(parts[2]); counter = int(parts[3])
         save_tasbih_session(uid, phrase_idx, counter)
         log_tasbih(uid, TASBIH_LIST[phrase_idx][0], counter)
-        await query.answer(f"💾 تم حفظ التقدم: {counter} مرة", show_alert=True)
+        await query.answer(f"✅ تم حفظ {counter} تسبيحة", show_alert=True)
         return
 
     if data.startswith("tsb_reset_"):
         phrase_idx = int(data.split("_")[2])
-        reset_tasbih_session(uid)
-        save_tasbih_session(uid, phrase_idx, 0)
+        reset_tasbih_session(uid); save_tasbih_session(uid, phrase_idx, 0)
         phrase, fad, req = TASBIH_LIST[phrase_idx]
-        msg = (
-            f"📿 *التسبيح*\n\n"
-            f"*{phrase}*\n"
-            f"_{fad}_\n\n"
-            f"الهدف: {req} مرة\n"
-            f"العداد: 0/{req}"
-        )
+        msg = f"📿 *{phrase}*\n\n_{fad}_\n\nالعدد المطلوب: {req}\nتقدمك الحالي: 0/{req}"
         await safe_edit(query, msg, reply_markup=build_tasbih_counter_keyboard(phrase_idx, 0, req))
         return
 
     if data.startswith("tsb_done_"):
         phrase_idx = int(data.split("_")[2])
         phrase, fad, req = TASBIH_LIST[phrase_idx]
-        log_tasbih(uid, phrase, req)
-        reset_tasbih_session(uid)
+        log_tasbih(uid, phrase, req); reset_tasbih_session(uid)
         motivation = random.choice(MOTIVATION_MSGS)
-        msg = f"📿 *{phrase}*\n\n✅ *أحسنت! أتممت {req} مرة!*\n\n{motivation}"
-        await safe_edit(query, msg,
-                        reply_markup=InlineKeyboardMarkup([[back_btn("tasbih_list"), back_btn("main_menu")]]))
+        msg = f"📿 *{phrase}*\n\n✅ أتممت {req} مرة!\n\n{motivation}"
+        await safe_edit(query, msg, reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("📋 قائمة التسابيح", callback_data="tasbih_list")],
+            [back_btn("main_menu")],
+        ]))
         return
 
-    # ── الأذكار (صباح/مساء/نوم/يقظة/وضوء) ───────────────────────
+    # ── الأذكار ───────────────────────────────────────────────────
     if data.startswith("adhkar_next_"):
-        parts   = data.split("_")
-        key     = parts[2]
-        idx     = int(parts[3])
-        counter = int(parts[4])
+        parts = data.split("_"); key = parts[2]; idx = int(parts[3]); counter = int(parts[4])
         if key in ADHKAR_MAP:
             _, lst = ADHKAR_MAP[key]
             save_adhkar_progress(uid, key, idx)
@@ -1546,10 +1440,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data.startswith("adhkar_count_"):
-        parts   = data.split("_")
-        key     = parts[2]
-        idx     = int(parts[3])
-        counter = int(parts[4])
+        parts = data.split("_"); key = parts[2]; idx = int(parts[3]); counter = int(parts[4])
         if key in ADHKAR_MAP:
             _, lst = ADHKAR_MAP[key]
             item_text, item_src, item_req = lst[idx]
@@ -1558,10 +1449,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if next_idx >= len(lst):
                     reset_adhkar_progress(uid, key)
                     motivation = random.choice(MOTIVATION_MSGS)
-                    _, title = ADHKAR_MAP[key]
-                    await safe_edit(
-                        query,
-                        f"✅ *أتممت جميع الأذكار!*\n\n{motivation}",
+                    title = ADHKAR_MAP[key][0]
+                    await safe_edit(query,
+                        f"✅ *أتممت {title}!*\n\n{motivation}",
                         reply_markup=InlineKeyboardMarkup([[back_btn("main_menu")]]))
                     return
                 save_adhkar_progress(uid, key, next_idx)
@@ -1571,11 +1461,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data.startswith("adhkar_save_"):
-        parts   = data.split("_")
-        key     = parts[2]
-        idx     = int(parts[3])
+        parts = data.split("_"); key = parts[2]; idx = int(parts[3])
         save_adhkar_progress(uid, key, idx)
-        await query.answer("💾 تم حفظ التقدم", show_alert=True)
+        await query.answer("✅ تم حفظ التقدم", show_alert=True)
         return
 
     if data.startswith("adhkar_restart_"):
@@ -1591,59 +1479,137 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reset_adhkar_progress(uid, key)
         motivation = random.choice(MOTIVATION_MSGS)
         label = ADHKAR_MAP[key][0] if key in ADHKAR_MAP else "الأذكار"
-        await safe_edit(
-            query,
+        await safe_edit(query,
             f"✅ *أتممت {label}!*\n\n{motivation}",
             reply_markup=InlineKeyboardMarkup([[back_btn("main_menu")]]))
         return
 
+    # ── أذكار الصلاة ──────────────────────────────────────────────
+    if data.startswith("pr_adhkar_"):
+        key = data[len("pr_adhkar_"):]
+        if key in PRAYER_ADHKAR:
+            lst  = PRAYER_ADHKAR[key]
+            item = lst[0]
+            text = f"🕌 *{key}*\n\n{item[0]}\n\n📌 _{item[1]}_"
+            if len(lst) > 1:
+                kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("▶️ التالي", callback_data=f"pr_next_{key}_1")],
+                    [back_btn("prayer_adhkar_menu")],
+                ])
+            else:
+                kb = InlineKeyboardMarkup([[back_btn("prayer_adhkar_menu")]])
+            await safe_edit(query, text, reply_markup=kb)
+        return
+
+    if data == "prayer_adhkar_menu":
+        await safe_edit(query, "🕌 *أذكار الصلاة*\n\nاختر:", reply_markup=build_prayer_adhkar_keyboard())
+        return
+
+    if data.startswith("pr_next_"):
+        parts = data.split("_", 3); key = parts[2]; idx = int(parts[3])
+        if key in PRAYER_ADHKAR:
+            lst = PRAYER_ADHKAR[key]
+            if idx >= len(lst):
+                await safe_edit(query, f"✅ *{key}* — تم!", reply_markup=InlineKeyboardMarkup([[back_btn("prayer_adhkar_menu")]]))
+                return
+            item = lst[idx]
+            text = f"🕌 *{key}* ({idx+1}/{len(lst)})\n\n{item[0]}\n\n📌 _{item[1]}_"
+            nav  = []
+            if idx + 1 < len(lst):
+                nav.append(InlineKeyboardButton("▶️ التالي", callback_data=f"pr_next_{key}_{idx+1}"))
+            else:
+                nav.append(InlineKeyboardButton("✅ تم", callback_data="prayer_adhkar_menu"))
+            kb = InlineKeyboardMarkup([nav, [back_btn("prayer_adhkar_menu")]])
+            await safe_edit(query, text, reply_markup=kb)
+        return
+
+    # ── الأدعية الخاصة ────────────────────────────────────────────
+    if data.startswith("sdua_"):
+        idx  = int(data.split("_")[1])
+        keys = list(SPECIAL_DUAS.keys())
+        if idx < len(keys):
+            key   = keys[idx]
+            items = SPECIAL_DUAS[key]
+            text  = f"🤲 *{key}*\n\n"
+            for item in items:
+                text += f"{item[0]}\n\n📌 _{item[1]}_\n\n"
+            kb = InlineKeyboardMarkup([[back_btn("special_duas_menu")]])
+            await safe_edit(query, text.strip(), reply_markup=kb)
+        return
+
+    if data == "special_duas_menu":
+        await safe_edit(query, "🌺 *أدعية خاصة*\n\nاختر:", reply_markup=build_special_duas_keyboard())
+        return
+
+    # ── أحكام المرأة ──────────────────────────────────────────────
+    if data.startswith("wad_"):
+        idx  = int(data.split("_")[1])
+        keys = list(WOMAN_ADHKAR.keys())
+        if idx < len(keys):
+            key   = keys[idx]
+            items = WOMAN_ADHKAR[key]
+            text  = f"🌸 *{key}*\n\n"
+            for item in items:
+                text += f"{item[0]}\n\n📌 _{item[1]}_\n\n"
+            kb = InlineKeyboardMarkup([[back_btn("woman_adhkar_menu")]])
+            await safe_edit(query, text.strip(), reply_markup=kb)
+        return
+
+    if data == "woman_adhkar_menu":
+        await safe_edit(query, "🌸 *أحكام المرأة*\n\nاختر:", reply_markup=build_woman_adhkar_keyboard())
+        return
+
+    # ── المدن — أوقات الصلاة ─────────────────────────────────────
+    if data.startswith("city_"):
+        city = data[5:]
+        save_user_city(uid, city)
+        msg = await fetch_prayer_times(city)
+        kb  = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔄 تغيير المدينة", callback_data="change_city")],
+            [back_btn("main_menu")],
+        ])
+        await safe_edit(query, msg, reply_markup=kb)
+        return
+
+    if data == "change_city":
+        await safe_edit(query, "🕐 *أوقات الصلاة*\n\nاختر مدينتك:", reply_markup=build_city_keyboard())
+        return
+
+    # ── سنن الجمعة ────────────────────────────────────────────────
+    if data.startswith("friday_surah_"):
+        surah_num  = int(data.split("_")[2])
+        desc       = FRIDAY_SURAHS.get(surah_num, "")
+        txt_ayah   = await fetch_quran_ayah(surah_num, 1)
+        msg = (
+            f"📖 *{desc}*\n\n"
+            f"سورة *{SURAH_NAMES[surah_num]}* — الآية الأولى:\n\n"
+            f"{txt_ayah}" if txt_ayah else "⚠️ تعذّر تحميل الآية."
+        )
+        await safe_edit(query, msg, reply_markup=InlineKeyboardMarkup([[back_btn("friday_menu")]]))
+        return
+
+    if data.startswith("friday_info_"):
+        idx = int(data.split("_")[2])
+        if idx < len(FRIDAY_SUNNAN):
+            s   = FRIDAY_SUNNAN[idx]
+            msg = f"⭐ *{s['title']}*\n\n{s['text']}\n\n📌 _{s['source']}_"
+            await safe_edit(query, msg, reply_markup=InlineKeyboardMarkup([[back_btn("friday_menu")]]))
+        return
+
+    if data == "friday_menu":
+        await safe_edit(query, "⭐ *سنن يوم الجمعة*\n\nاختر:", reply_markup=build_friday_keyboard())
+        return
+
     # ── الإدارة ───────────────────────────────────────────────────
-    if not is_admin(uid) and data.startswith("adm_"):
-        await query.answer("⛔ غير مصرح لك.", show_alert=True)
-        return
-
-    if data == "adm_stats":
-        stats = get_admin_stats()
-        msg = (
-            f"📊 *إحصائيات البوت*\n\n"
-            f"👥 المستخدمون: {stats['users']}\n"
-            f"👤 المشرفون: {stats['admins']}\n"
-            f"🚫 المحظورون: {stats['banned']}\n"
-            f"🟢 نشطون اليوم: {stats['active_today']}\n"
-            f"📚 الأحاديث: {stats['hadiths']}\n"
-            f"🤲 الأدعية: {stats['duas']}\n"
-            f"📋 المحتوى: {stats['content']}\n"
-            f"📿 إجمالي التسبيح: {stats['tasbih_total']}\n"
-            f"💬 استفسارات معلقة: {stats['pending']}\n"
-            f"✅ استفسارات مُجابة: {stats['replied']}"
-        )
-        await safe_edit(query, msg,
-                        reply_markup=InlineKeyboardMarkup([[back_btn("adm_back")]]))
-        return
-
-    if data == "adm_back":
-        stats = get_admin_stats()
-        msg = (
-            f"⚙️ *لوحة تحكم الإدارة*\n\n"
-            f"👥 المستخدمون: {stats['users']} | 🚫 محظور: {stats['banned']}\n"
-            f"🟢 نشطون اليوم: {stats['active_today']} | 👤 مشرفون: {stats['admins']}\n"
-            f"📚 الأحاديث: {stats['hadiths']} | 🤲 الأدعية: {stats['duas']}\n"
-            f"📋 محتوى: {stats['content']} | 📿 إجمالي تسبيح: {stats['tasbih_total']}\n"
-            f"💬 معلقة: {stats['pending']} | ✅ مُجاب: {stats['replied']}"
-        )
-        await safe_edit(query, msg, reply_markup=build_admin_keyboard())
-        return
-
     if data == "adm_inquiries":
         rows = get_pending_inquiries()
         if not rows:
-            await safe_edit(query, "✅ *لا توجد استفسارات معلقة.*",
-                            reply_markup=InlineKeyboardMarkup([[back_btn("adm_back")]]))
+            await safe_edit(query, "✅ لا توجد استفسارات معلقة.", reply_markup=InlineKeyboardMarkup([[back_btn("adm_back")]]))
             return
-        text = "📋 *الاستفسارات المعلقة:*\n\n"
         btns = []
+        text = "📋 *الاستفسارات المعلقة:*\n\n"
         for r in rows[:10]:
-            iid, u_id, uname, fname, msg_txt, created = r
+            iid, uid2, uname, fname, msg_txt, created = r
             text += f"#{iid} — {fname} (@{uname})\n{msg_txt[:80]}...\n\n"
             btns.append([InlineKeyboardButton(f"↩️ رد على #{iid}", callback_data=f"adm_reply_{iid}")])
         btns.append([back_btn("adm_back")])
@@ -1653,66 +1619,82 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "adm_all_inquiries":
         rows = get_all_inquiries()
         if not rows:
-            await safe_edit(query, "📜 *لا توجد استفسارات.*",
-                            reply_markup=InlineKeyboardMarkup([[back_btn("adm_back")]]))
+            await safe_edit(query, "⚠️ لا توجد استفسارات.", reply_markup=InlineKeyboardMarkup([[back_btn("adm_back")]]))
             return
-        text = "📜 *آخر الاستفسارات:*\n\n"
+        text = "📜 *كل الاستفسارات:*\n\n"
         for r in rows[:10]:
-            iid, u_id, uname, fname, msg_txt, status, created = r
+            iid, uid2, uname, fname, msg_txt, status, created = r
             icon = "✅" if status == "replied" else "⏳"
-            text += f"{icon} #{iid} — {fname}: {msg_txt[:60]}...\n"
-        await safe_edit(query, text,
-                        reply_markup=InlineKeyboardMarkup([[back_btn("adm_back")]]))
+            text += f"{icon} #{iid} — {fname} | {msg_txt[:60]}...\n"
+        await safe_edit(query, text, reply_markup=InlineKeyboardMarkup([[back_btn("adm_back")]]))
         return
 
     if data.startswith("adm_reply_"):
         iid = int(data.split("_")[2])
-        context.user_data["awaiting"]  = "adm_reply"
+        context.user_data["awaiting"] = "adm_reply"
         context.user_data["reply_iid"] = iid
-        await safe_edit(query, f"📩 *اكتب ردك على الاستفسار #{iid}:*")
+        await safe_edit(query, f"↩️ اكتب ردك على الاستفسار #{iid}:")
         return
 
     if data == "adm_users_list":
         rows = get_users_list()
         text = "👥 *قائمة المستخدمين (آخر 30):*\n\n"
         for r in rows:
-            u_id, uname, fname, adm, banned, seen = r
-            icon = "🔴" if banned else ("⭐" if adm else "🟢")
-            text += f"{icon} {fname} (@{uname}) — `{u_id}`\n"
-        await safe_edit(query, text,
-                        reply_markup=InlineKeyboardMarkup([[back_btn("adm_back")]]))
+            uid2, uname, fname, adm, banned, seen = r
+            icon = "🚫" if banned else ("👤" if adm else "✅")
+            text += f"{icon} {fname} (@{uname}) — {uid2}\n"
+        await safe_edit(query, text, reply_markup=InlineKeyboardMarkup([[back_btn("adm_back")]]))
         return
 
-    if data in ("adm_add_hadith","adm_add_dua","adm_del_hadith","adm_del_dua",
-                "adm_add_content","adm_del_content","adm_add_admin","adm_del_admin",
-                "adm_ban","adm_unban","adm_send_user","adm_broadcast"):
-        prompts = {
-            "adm_add_hadith":  "📚 أرسل: *نص الحديث | المصدر*",
-            "adm_add_dua":     "🤲 أرسل: *نص الدعاء | المصدر*",
-            "adm_del_hadith":  "🗑 أرسل *رقم ID* الحديث لحذفه:",
-            "adm_del_dua":     "🗑 أرسل *رقم ID* الدعاء لحذفه:",
-            "adm_add_content": "➕ أرسل: *الفئة | النص | المصدر*",
-            "adm_del_content": "🗑 أرسل *رقم ID* المحتوى لحذفه:",
-            "adm_add_admin":   "👤 أرسل *ID* المستخدم لتعيينه مشرفاً:",
-            "adm_del_admin":   "❌ أرسل *ID* المشرف لإزالته:",
-            "adm_ban":         "🚫 أرسل *ID* المستخدم لحظره:",
-            "adm_unban":       "✅ أرسل *ID* المستخدم لرفع الحظر:",
-            "adm_send_user":   "📩 أرسل *نص الرسالة* أولاً:",
-            "adm_broadcast":   "📢 أرسل *نص البث* لإرساله لجميع المستخدمين:",
-        }
-        context.user_data["awaiting"] = data
-        await safe_edit(query, prompts[data],
-                        reply_markup=InlineKeyboardMarkup([[back_btn("adm_back")]]))
+    if data == "adm_stats":
+        stats = get_admin_stats()
+        msg = (
+            f"📊 *إحصائيات البوت*\n\n"
+            f"👥 المستخدمون: {stats['users']} | 🚫 محظورون: {stats['banned']}\n"
+            f"🟢 نشطون اليوم: {stats['active_today']} | 👤 مشرفون: {stats['admins']}\n"
+            f"📚 أحاديث: {stats['hadiths']} | 🤲 أدعية: {stats['duas']}\n"
+            f"📝 محتوى: {stats['content']} | 📿 تسبيح: {stats['tasbih_total']}\n"
+            f"💬 معلق: {stats['pending']} | ✅ مُجاب: {stats['replied']}"
+        )
+        await safe_edit(query, msg, reply_markup=InlineKeyboardMarkup([[back_btn("adm_back")]]))
+        return
+
+    if data == "adm_back":
+        stats = get_admin_stats()
+        msg = (
+            f"⚙️ *لوحة الإدارة*\n\n"
+            f"👥 المستخدمون: {stats['users']} | 🚫 محظورون: {stats['banned']}\n"
+            f"🟢 نشطون اليوم: {stats['active_today']}"
+        )
+        await safe_edit(query, msg, reply_markup=build_admin_keyboard())
+        return
+
+    prompts = {
+        "adm_add_hadith":  "📚 أرسل: نص الحديث | المصدر",
+        "adm_add_dua":     "🤲 أرسل: نص الدعاء | المصدر",
+        "adm_del_hadith":  "🗑 أرسل رقم الحديث للحذف:",
+        "adm_del_dua":     "🗑 أرسل رقم الدعاء للحذف:",
+        "adm_add_content": "📝 أرسل: التصنيف | النص | المصدر",
+        "adm_del_content": "🗑 أرسل رقم المحتوى للحذف:",
+        "adm_add_admin":   "👤 أرسل ID المستخدم لتعيينه مشرفاً:",
+        "adm_del_admin":   "❌ أرسل ID المشرف لإزالة صلاحيته:",
+        "adm_ban":         "🚫 أرسل ID المستخدم لحظره:",
+        "adm_unban":       "✅ أرسل ID المستخدم لرفع حظره:",
+        "adm_send_user":   "📩 أرسل الرسالة التي تريد إرسالها:",
+        "adm_broadcast":   "📢 أرسل رسالة البث العام:",
+    }
+    if data in prompts:
+        context.user_data["awaiting"] = data[4:]  # remove "adm_"
+        await safe_edit(query, prompts[data])
         return
 
 # ══════════════════════════════════════════════════════════════════
-# مهام الإشعارات التلقائية
+# الإشعارات اليومية
 # ══════════════════════════════════════════════════════════════════
 async def daily_notifications(app):
     while True:
         try:
             now = datetime.now()
-            # إشعار الصباح 06:00
             if now.hour == 6 and now.minute == 0:
                 users = get_all_users()
                 for uid in users:
@@ -1720,11 +1702,11 @@ async def daily_notifications(app):
                         try:
                             await app.bot.send_message(
                                 uid,
-                                "🌅 *صباح الخير!*\n\nلا تنس أذكار الصباح 📿\n_ابدأ يومك بذكر الله_",
+                                "🌅 *صباح الخير!*\n\nلا تنس أذكار الصباح 🌿\n\nاضغط على *أذكار الصباح* من القائمة.",
                                 parse_mode=ParseMode.MARKDOWN)
                             mark_notif_sent(uid, "morning")
                         except: pass
-            # إشعار المساء 18:00
+
             if now.hour == 18 and now.minute == 0:
                 users = get_all_users()
                 for uid in users:
@@ -1732,32 +1714,33 @@ async def daily_notifications(app):
                         try:
                             await app.bot.send_message(
                                 uid,
-                                "🌆 *مساء الخير!*\n\nلا تنس أذكار المساء 📿\n_اختم يومك بذكر الله_",
+                                "🌆 *مساء الخير!*\n\nلا تنس أذكار المساء 🌿\n\nاضغط على *أذكار المساء* من القائمة.",
                                 parse_mode=ParseMode.MARKDOWN)
                             mark_notif_sent(uid, "evening")
                         except: pass
+
         except Exception as e:
             logger.error(f"Notification error: {e}")
         await asyncio.sleep(60)
 
 # ══════════════════════════════════════════════════════════════════
-# تشغيل البوت
+# main
 # ══════════════════════════════════════════════════════════════════
 async def post_init(app):
     asyncio.create_task(daily_notifications(app))
 
 def main():
     init_db()
-    app = (ApplicationBuilder()
-           .token(TOKEN)
-           .post_init(post_init)
-           .build())
-
+    app = (
+        ApplicationBuilder()
+        .token(TOKEN)
+        .post_init(post_init)
+        .build()
+    )
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help",  cmd_help))
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
     logger.info("🕌 بوت المسلم يعمل الآن...")
     app.run_polling(drop_pending_updates=True)
 
