@@ -1764,9 +1764,13 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     jq = app.job_queue
-    jq.run_daily(job_morning, time=time(5, 30, tzinfo=timezone.utc))
-    jq.run_daily(job_evening, time=time(16, 0, tzinfo=timezone.utc))
-    jq.run_daily(job_friday,  time=time(6,  0, tzinfo=timezone.utc))
+    if jq is not None:
+        jq.run_daily(job_morning, time=time(5, 30, tzinfo=timezone.utc))
+        jq.run_daily(job_evening, time=time(16, 0, tzinfo=timezone.utc))
+        jq.run_daily(job_friday,  time=time(6,  0, tzinfo=timezone.utc))
+        logger.info("✅ JobQueue مفعّل — التنبيهات اليومية جاهزة.")
+    else:
+        logger.warning("⚠️ JobQueue غير مثبّت — التنبيهات اليومية معطّلة. لتفعيلها: pip install 'python-telegram-bot[job-queue]'")
 
     logger.info("🤖 البوت يعمل...")
     app.run_polling(drop_pending_updates=True)
