@@ -8,7 +8,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Cal
 logging.basicConfig(format="%(asctime)s | %(levelname)s | %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-TOKEN       = "BOT_TOKEN"
+TOKEN = os.environ.get("BOT_TOKEN")
 DB_PATH     = "muslim_bot.db"
 QURAN_API   = "https://api.alquran.cloud/v1"
 ALADHAN_API = "https://api.aladhan.com/v1"
